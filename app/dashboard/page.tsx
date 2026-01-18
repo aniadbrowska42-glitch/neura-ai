@@ -1,29 +1,57 @@
 'use client';
 
 import React, { useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+// Configurare Supabase (se citesc din variabilele de mediu)
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function DashboardNeura() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [status, setStatus] = useState('');
 
-  const handleUpload = async (e: any) => {
-    // Pentru test, folosim un link de imagine fix (vom adăuga upload-ul real ulterior)
-    const testImage = "https://replicate.delivery/pbxt/IJ2m5pL2d9L2A4I4J4J4J4J4J4J4J4J4/seed1024.png";
-    
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     setLoading(true);
+    setStatus('Se încarcă imaginea în Neura Cloud...');
+
     try {
+      // 1. Upload în Supabase Storage
+      const fileName = `${Date.now()}-${file.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('images')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Obținem URL-ul public al pozei
+      const { data: { publicUrl } } = supabase.storage
+        .from('images')
+        .getPublicUrl(fileName);
+
+      setStatus('AI-ul lucrează la claritate... Te rugăm așteaptă.');
+
+      // 3. Trimitem URL-ul către API-ul nostru de AI
       const response = await fetch('/api/upscale', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: testImage }),
+        body: JSON.stringify({ imageUrl: publicUrl }),
       });
 
       const data = await response.json();
       if (data.output) {
         setResult(data.output);
+        setStatus('Gata! Imaginea a fost îmbunătățită.');
       }
-    } catch (error) {
-      alert("Eroare la procesare");
+    } catch (error: any) {
+      console.error(error);
+      alert("Eroare: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -36,29 +64,42 @@ export default function DashboardNeura() {
           Neura AI Engine
         </h1>
         
-        <div className="bg-zinc-900 border-2 border-dashed border-zinc-800 rounded-3xl p-12 mb-8">
+        <div className="bg-zinc-900 border-2 border-dashed border-zinc-800 rounded-3xl p-12 mb-8 shadow-2xl">
           {loading ? (
             <div className="py-10">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <p>AI-ul lucrează la imaginea ta... Te rog așteaptă.</p>
+              <p className="text-blue-400 font-medium">{status}</p>
             </div>
           ) : result ? (
             <div>
-              <img src={result} alt="Rezultat" className="max-h-96 mx-auto rounded-lg shadow-2xl mb-6" />
-              <a href={result} download className="bg-green-600 hover:bg-green-500 px-6 py-3 rounded-xl font-bold">
-                Descarcă Imaginea Clară
-              </a>
-              <button onClick={() => setResult(null)} className="ml-4 text-gray-400 underline">Încarcă alta</button>
+              <div className="grid grid-cols-1 gap-4 mb-6">
+                <img src={result} alt="Rezultat" className="max-h-96 mx-auto rounded-xl shadow-2xl border border-zinc-700" />
+              </div>
+              <div className="flex justify-center gap-4">
+                <a href={result} target="_blank" className="bg-white text-black px-8 py-3 rounded-xl font-bold hover:bg-blue-500 hover:text-white transition">
+                  Descarcă Imaginea 4K
+                </a>
+                <button onClick={() => setResult(null)} className="bg-zinc-800 px-8 py-3 rounded-xl font-bold">
+                  Procesează Alta
+                </button>
+              </div>
             </div>
           ) : (
             <div>
-              <p className="text-gray-400 mb-6 text-lg">Test de procesare Neura v1.0</p>
-              <button 
-                onClick={handleUpload}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-10 rounded-2xl transition shadow-lg shadow-blue-600/20"
+              <p className="text-gray-400 mb-8">Încarcă o poză veche sau pixelată pentru a-i reda claritatea.</p>
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleUpload} 
+                className="hidden" 
+                id="realUpload" 
+              />
+              <label 
+                htmlFor="realUpload"
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-5 px-12 rounded-2xl transition cursor-pointer inline-block shadow-lg shadow-blue-600/20"
               >
-                TESTEAZĂ AI (4x Upscale)
-              </button>
+                SELECTEAZĂ POZA DIN CALCULATOR
+              </label>
             </div>
           )}
         </div>
