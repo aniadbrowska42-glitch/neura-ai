@@ -1,11 +1,54 @@
-import { redirect } from 'next/navigation';
-import { getDefaultSignInView } from '@/utils/auth-helpers/settings';
-import { cookies } from 'next/headers';
+'use client';
+
+import { createClient } from '@supabase/supabase-js';
+import React from 'react';
+
+// Inițializăm Supabase
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
 export default function SignIn() {
-  const preferredSignInView =
-    cookies().get('preferredSignInView')?.value || null;
-  const defaultView = getDefaultSignInView(preferredSignInView);
+  const handleGoogleLogin = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        // Aceasta este adresa unde Google îl trimite pe user după ce apasă "Accept"
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+  };
 
-  return redirect(`/signin/${defaultView}`);
+  return (
+    <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center p-6 font-sans">
+      <div className="max-w-md w-full bg-zinc-900/50 border border-zinc-800 p-10 rounded-[2.5rem] text-center backdrop-blur-sm shadow-2xl">
+        <div className="mb-10">
+          <h1 className="text-4xl font-black italic tracking-tighter mb-2">
+            NEURA<span className="text-blue-600">.AI</span>
+          </h1>
+          <p className="text-zinc-500 text-xs uppercase tracking-[0.2em]">Secure Cloud Access</p>
+        </div>
+
+        <button 
+          onClick={handleGoogleLogin}
+          className="w-full bg-white text-black font-black py-5 rounded-2xl flex items-center justify-center gap-4 hover:bg-blue-600 hover:text-white transition-all transform active:scale-95 shadow-lg"
+        >
+          <svg className="w-6 h-6" viewBox="0 0 24 24">
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+          </svg>
+          LOGARE CU GOOGLE
+        </button>
+
+        <div className="mt-12 pt-8 border-t border-zinc-800/50">
+          <p className="text-[10px] text-zinc-600 uppercase tracking-widest leading-relaxed">
+            Prin autentificare, confirmi că ești de acord cu <br/> procesarea datelor prin Neura Engine.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
