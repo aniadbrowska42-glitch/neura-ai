@@ -1,138 +1,188 @@
-import Link from 'next/link';
-import React from 'react';
-import { ArrowRight, Video, Target, Camera, Palette, Sparkles, CheckCircle2 } from 'lucide-react';
+'use client';
 
-export default function HomePage() {
+import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { Sparkles, Zap, PlayCircle, ShieldCheck, CreditCard, ImageIcon, Film } from 'lucide-react';
+
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL || '', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '');
+
+export default function DashboardNeura() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [status, setStatus] = useState('');
+  const [selectedTool, setSelectedTool] = useState('wan-video');
+  const [prompt, setPrompt] = useState('');
+  const [userCredits, setUserCredits] = useState<number | string>('...');
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Încărcăm datele utilizatorului la pornire
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        const { data } = await supabase.from('users').select('credits').eq('id', user.id).single();
+        if (data) setUserCredits(data.credits);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, isFree: boolean) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!isFree && typeof userCredits === 'number' && userCredits < 1) {
+      alert("Nu mai ai credite! Cumpără un pachet sau folosește testul gratuit.");
+      return;
+    }
+
+    setLoading(true);
+    setStatus(isFree ? 'Generăm test gratuit (5 secunde)...' : 'Procesăm la calitate maximă...');
+
+    try {
+      const fileName = `${Date.now()}-${file.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('images').upload(fileName, file);
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(fileName);
+
+      const response = await fetch('/api/upscale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          imageUrl: publicUrl, 
+          tool: selectedTool,
+          prompt: prompt,
+          isFreeTrial: isFree 
+        }),
+      });
+
+      const data = await response.json();
+      if (data.output) {
+        setResult(Array.isArray(data.output) ? data.output[0] : data.output);
+        // Dacă nu a fost trial, scădem un credit vizual (baza de date se ocupă prin webhook sau funcție)
+        if (!isFree && typeof userCredits === 'number') setUserCredits(userCredits - 1);
+      } else {
+        throw new Error(data.error || "AI-ul nu a răspuns.");
+      }
+    } catch (error: any) {
+      alert("Eroare Neura: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const tools = [
-    { 
-      title: 'Wan 2.5 Video', 
-      desc: 'Generare video cinematic la 60 FPS din orice imagine.', 
-      icon: <Video className="text-blue-500" />, 
-      img: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=800&auto=format&fit=crop',
-      label: 'Video Gen'
-    },
-    { 
-      title: 'Neura Upscale', 
-      desc: 'Mărește rezoluția la 4K și repară detaliile faciale.', 
-      icon: <Target className="text-purple-500" />, 
-      img: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=800&auto=format&fit=crop',
-      label: '4K Enhance'
-    },
-    { 
-      title: 'Face Swap Pro', 
-      desc: 'Schimbă fețele cu un realism extrem folosind AI.', 
-      icon: <Camera className="text-emerald-500" />, 
-      img: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=800&auto=format&fit=crop',
-      label: 'Deepfake Tech'
-    },
-    { 
-      title: 'Colorizare AI', 
-      desc: 'Redă viața și culoarea fotografiilor vechi alb-negru.', 
-      icon: <Palette className="text-orange-500" />, 
-      img: 'https://images.unsplash.com/photo-1527203561188-dae1bc1a417f?q=80&w=800&auto=format&fit=crop',
-      label: 'Colorize'
-    },
+    { id: 'wan-video', name: 'Wan 2.5 Video', desc: 'Generare Video cinematic', icon: <Film className="text-blue-500" /> },
+    { id: 'upscale', name: 'Neura Upscale', desc: 'Claritate 4K & Face Fix', icon: <Sparkles className="text-purple-500" /> },
+    { id: 'face-swap', name: 'Face Swap Pro', desc: 'Schimb de fețe realist', icon: <Zap className="text-emerald-500" /> },
+    { id: 'colorize', name: 'Colorizare AI', desc: 'Poze vechi în culori', icon: <ImageIcon className="text-orange-500" /> },
   ];
 
   return (
-    <div className="relative min-h-screen bg-black text-white font-sans selection:bg-blue-500/30 overflow-x-hidden">
+    <div className="min-h-screen bg-[#050505] text-white p-4 md:p-12 font-sans relative overflow-hidden">
       
-      {/* --- FUNDAL IMAGINE OPACĂ --- */}
-      <div className="fixed inset-0 z-0">
-        <img 
-          src="https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?q=80&w=1920&auto=format&fit=crop" 
-          alt="Background" 
-          className="w-full h-full object-cover opacity-20"
-        />
-        {/* Gradient pentru a face fundalul să se piardă în negru */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black via-black/80 to-black" />
-      </div>
+      {/* Background Glow */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[300px] bg-blue-600/5 blur-[120px] rounded-full -z-10" />
 
-      <div className="relative z-10">
-        {/* --- NAVBAR --- */}
-        <nav className="flex justify-between items-center px-6 md:px-12 py-6 border-b border-white/5 backdrop-blur-md sticky top-0 bg-black/20">
-          <div className="text-2xl font-black italic tracking-tighter flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center not-italic text-sm shadow-[0_0_15px_rgba(37,99,235,0.5)]">N</div>
-            NEURA<span className="text-blue-600">.AI</span>
+      <div className="max-w-6xl mx-auto">
+        <header className="mb-12 flex flex-col items-center">
+          <h1 className="text-4xl font-black italic tracking-tighter mb-4">NEURA<span className="text-blue-600">.AI</span></h1>
+          <div className="flex items-center gap-3 bg-zinc-900/50 border border-white/5 px-6 py-2 rounded-full backdrop-blur-md">
+            <span className="text-[10px] font-bold text-zinc-500 tracking-widest uppercase">Balanță:</span>
+            <span className="text-blue-400 font-mono font-bold">🪙 {userCredits} Credite</span>
+            <button className="ml-4 text-[10px] bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg font-black transition-all">+ CUMPĂRĂ</button>
           </div>
-          <div className="hidden md:flex items-center gap-8 text-sm font-bold text-zinc-400">
-            <Link href="#tools" className="hover:text-white transition">Instrumente</Link>
-            <Link href="#pricing" className="hover:text-white transition">Prețuri</Link>
-          </div>
-          <Link href="/signin" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2.5 rounded-full text-sm font-black transition-all shadow-[0_0_25px_rgba(37,99,235,0.4)]">
-            DASHBOARD
-          </Link>
-        </nav>
+        </header>
 
-        {/* --- HERO --- */}
-        <section className="max-w-6xl mx-auto pt-24 pb-20 px-6 text-center">
-          <div className="inline-flex items-center gap-2 bg-blue-600/10 border border-blue-600/20 px-4 py-1.5 rounded-full text-blue-400 text-[10px] font-bold tracking-[0.2em] mb-10 uppercase">
-            <Sparkles size={12} /> Neura Engine v1.5 este Live
-          </div>
-          <h1 className="text-6xl md:text-[6rem] font-black tracking-tight mb-8 leading-[0.85] italic">
-            VIITORUL <br /> 
-            <span className="text-blue-600 not-italic">VIZUALULUI.</span>
-          </h1>
-          <p className="text-zinc-400 text-lg md:text-xl max-w-2xl mx-auto mb-12 font-medium">
-            Singura platformă din România care reunește <span className="text-white">Wan 2.5</span> și <span className="text-white">Face Swap Pro</span> într-o singură interfață.
-          </p>
-          <Link href="/signin" className="bg-white text-black text-lg font-black px-14 py-5 rounded-2xl hover:bg-blue-600 hover:text-white transition-all transform hover:scale-105 shadow-2xl inline-flex items-center gap-3">
-            ÎNCEPE ACUM <ArrowRight />
-          </Link>
-        </section>
-
-        {/* --- GRID INSTRUMENTE CU IMAGINI --- */}
-        <section id="tools" className="max-w-7xl mx-auto px-6 py-24">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {tools.map((tool, i) => (
-              <div key={i} className="group bg-zinc-900/40 border border-white/5 rounded-[2.5rem] overflow-hidden hover:border-blue-600/50 transition-all duration-500 backdrop-blur-sm">
-                <div className="flex flex-col lg:flex-row">
-                  {/* Poza de Prezentare */}
-                  <div className="lg:w-1/2 h-64 lg:h-auto relative overflow-hidden">
-                    <img src={tool.img} alt={tool.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-70 group-hover:opacity-100" />
-                    <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase text-blue-400 border border-white/10">
-                      {tool.label}
-                    </div>
-                  </div>
-                  {/* Textul Cardului */}
-                  <div className="lg:w-1/2 p-10 flex flex-col justify-center">
-                    <div className="mb-4">{tool.icon}</div>
-                    <h3 className="text-2xl font-black mb-3 italic tracking-tight">{tool.title}</h3>
-                    <p className="text-zinc-400 text-sm leading-relaxed mb-6">{tool.desc}</p>
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-zinc-500 tracking-widest uppercase">
-                      <CheckCircle2 size={14} className="text-blue-500" /> Procesare în Cloud
-                    </div>
-                  </div>
-                </div>
+        {!result && !loading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+            {tools.map((tool) => (
+              <div 
+                key={tool.id}
+                onClick={() => setSelectedTool(tool.id)}
+                className={`p-6 rounded-3xl border-2 cursor-pointer transition-all duration-300 ${selectedTool === tool.id ? 'border-blue-600 bg-blue-600/5 scale-[1.02]' : 'border-zinc-800 bg-zinc-900/30 hover:border-zinc-700'}`}
+              >
+                <div className="mb-4">{tool.icon}</div>
+                <h3 className="font-bold text-lg leading-tight">{tool.name}</h3>
+                <p className="text-zinc-500 text-xs mt-2 leading-relaxed">{tool.desc}</p>
               </div>
             ))}
           </div>
-        </section>
+        )}
 
-        {/* --- PRICING --- */}
-        <section id="pricing" className="max-w-4xl mx-auto px-6 py-20 mb-32">
-          <div className="bg-blue-600 rounded-[3rem] p-12 text-center relative overflow-hidden shadow-[0_0_50px_rgba(37,99,235,0.3)]">
-            <div className="relative z-10">
-              <h2 className="text-4xl font-black mb-4">Ești gata să creezi?</h2>
-              <p className="text-blue-100 mb-10 font-medium text-lg">Pachete de la 50 RON pentru 50 de credite.</p>
-              <Link href="/signin" className="bg-white text-blue-600 text-lg font-black px-12 py-4 rounded-xl hover:bg-zinc-100 transition-all shadow-xl">
-                CUMPĂRĂ CREDITE
-              </Link>
+        <div className="max-w-3xl mx-auto bg-zinc-900/40 border border-zinc-800/50 p-8 md:p-12 rounded-[3rem] backdrop-blur-xl shadow-3xl">
+          {loading ? (
+            <div className="py-20 text-center animate-pulse">
+              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-8 shadow-[0_0_20px_rgba(37,99,235,0.3)]"></div>
+              <p className="text-blue-400 font-bold tracking-widest uppercase text-xs">{status}</p>
             </div>
-            {/* Element decorativ fundal pricing */}
-            <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-white/10 rounded-full blur-3xl" />
-          </div>
-        </section>
+          ) : result ? (
+            <div className="animate-in fade-in zoom-in duration-500">
+              <div className="rounded-[2rem] overflow-hidden border border-zinc-800 mb-8 bg-black shadow-2xl">
+                {selectedTool === 'wan-video' || result.includes('.mp4') ? (
+                  <video src={result} controls autoPlay loop className="w-full h-auto" />
+                ) : (
+                  <img src={result} alt="AI Result" className="w-full h-auto" />
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <a href={result} target="_blank" rel="noreferrer" className="bg-white text-black px-12 py-4 rounded-2xl font-black hover:bg-blue-600 hover:text-white transition-all text-center">
+                  DESCARCĂ FIȘIERUL
+                </a>
+                <button onClick={() => setResult(null)} className="bg-zinc-800 text-white px-12 py-4 rounded-2xl font-bold hover:bg-zinc-700 transition">
+                  PROIECT NOU
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {selectedTool === 'wan-video' && (
+                <div className="space-y-3">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em] ml-2">Descrie mișcarea dorită</label>
+                  <textarea 
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Ex: camera rotates around the subject, slow motion, cinematic lighting, 4k detail..."
+                    className="w-full bg-black/50 border border-zinc-800 rounded-[1.5rem] p-6 text-white focus:border-blue-600 outline-none h-32 text-sm resize-none transition-all focus:ring-4 focus:ring-blue-600/10"
+                  />
+                </div>
+              )}
 
-        {/* --- FOOTER --- */}
-        <footer className="border-t border-white/5 py-12 text-center bg-black/40 backdrop-blur-md">
-          <div className="text-xl font-black italic tracking-tighter mb-4">
-            NEURA<span className="text-blue-600">.AI</span>
-          </div>
-          <p className="text-zinc-600 text-[10px] tracking-[0.4em] uppercase font-bold">
-            © {new Date().getFullYear()} NEURA CLOUD COMPUTING • ROMÂNIA
-          </p>
-        </footer>
+              <div className="grid grid-cols-1 gap-4">
+                {/* Buton PRO */}
+                <div className="relative group">
+                  <input type="file" onChange={(e) => handleUpload(e, false)} className="hidden" id="file-pro" />
+                  <label htmlFor="file-pro" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-6 rounded-2xl cursor-pointer transition-all flex flex-col items-center justify-center shadow-2xl border-b-4 border-blue-800 active:border-b-0 active:translate-y-1">
+                    <div className="flex items-center gap-2">
+                      <Zap size={20} />
+                      <span className="text-lg">PROCESEAZĂ COMPLET (1 CREDIT)</span>
+                    </div>
+                    <span className="text-[10px] opacity-70 font-bold mt-1 tracking-widest uppercase italic">Fără limitări • Calitate Maximă 4K</span>
+                  </label>
+                </div>
+
+                {/* Buton GRATUIT */}
+                <div className="relative group">
+                  <input type="file" onChange={(e) => handleUpload(e, true)} className="hidden" id="file-free" />
+                  <label htmlFor="file-free" className="w-full bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 font-bold py-5 rounded-2xl cursor-pointer transition-all flex flex-col items-center justify-center border border-zinc-700">
+                    <div className="flex items-center gap-2">
+                      <PlayCircle size={18} className="text-blue-500" />
+                      <span className="text-sm">TEST GRATUIT (5 SECUNDE)</span>
+                    </div>
+                    <span className="text-[9px] opacity-40 uppercase tracking-tighter mt-1 italic">Rezoluție redusă • Demo rapid</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-6 pt-4 opacity-30">
+                <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest"><ShieldCheck size={12}/> Securizat</div>
+                <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest"><CreditCard size={12}/> Plată Stripe</div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
