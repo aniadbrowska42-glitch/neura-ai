@@ -7,18 +7,27 @@ const replicate = new Replicate({
 
 export async function POST(req: Request) {
   try {
-    const { imageUrl, tool, prompt } = await req.json();
+    // Extragem și parametrul isFreeTrial trimis din Dashboard
+    const { imageUrl, tool, prompt, isFreeTrial } = await req.json();
 
-    if (!imageUrl) return NextResponse.json({ error: 'Lipsește URL-ul' }, { status: 400 });
+    if (!imageUrl) return NextResponse.json({ error: 'Lipsește URL-ul fișierului' }, { status: 400 });
 
     let output;
 
     switch (tool) {
       case 'wan-video':
-        // WAN 2.1 - Cel mai nou model video (Generare 5 secunde)
+        // WAN 2.1 - Generare Video
+        // Dacă e TRIAL: generăm doar 30 de cadre (~1.5 secunde) pentru viteză
+        // Dacă e PRO: generăm 81 de cadre (~5 secunde) calitate maximă
         output = await replicate.run(
           "wan-video/wan-2.1-i2v-720p:194f447608e062145e695e1e48b8c71500d07a67f1395982e5bc01e405a8f4c2",
-          { input: { image: imageUrl, prompt: prompt || "cinematic motion", frames: 81 } }
+          { 
+            input: { 
+              image: imageUrl, 
+              prompt: prompt || "cinematic motion", 
+              frames: isFreeTrial ? 30 : 81 
+            } 
+          }
         );
         break;
 
@@ -37,15 +46,24 @@ export async function POST(req: Request) {
         );
         break;
 
-      default: // Upscale (Modelul standard)
+      default: // Neura Upscale (Mărire claritate)
+        // Dacă e TRIAL: mărim doar de 1.5 ori
+        // Dacă e PRO: mărim de 2 ori cu Face Enhance activat
         output = await replicate.run(
           "nightmareai/real-esrgan:f121d640d228e163cfd2582191e31c08ce2512a510ada9757afb388d0d40e10f",
-          { input: { image: imageUrl, upscale: 2, face_enhance: true } }
+          { 
+            input: { 
+              image: imageUrl, 
+              upscale: isFreeTrial ? 1.5 : 2, 
+              face_enhance: !isFreeTrial 
+            } 
+          }
         );
     }
 
     return NextResponse.json({ output });
   } catch (error: any) {
+    console.error("Eroare Neura AI Engine:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
