@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 // Configurare Supabase
@@ -14,6 +14,47 @@ export default function DashboardNeura() {
   const [status, setStatus] = useState('');
   const [selectedTool, setSelectedTool] = useState('wan-video');
   const [prompt, setPrompt] = useState('');
+  const [userCredits, setUserCredits] = useState<number | string>('...');
+  const [userId, setUserId] = useState<string | null>(null);
+
+  // Încărcăm datele utilizatorului la pornire
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        const { data } = await supabase
+          .from('users')
+          .select('credits')
+          .eq('id', user.id)
+          .single();
+        if (data) setUserCredits(data.credits);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  const handleBuyCredits = async () => {
+    if (!userId) {
+      alert("Te rugăm să te loghezi pentru a cumpăra credite.");
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          priceId: 'price_1Srw793aP8nP4xIKRXd1v2Eq', // Codul tău Stripe
+          userId: userId 
+        }),
+      });
+      const data = await response.json();
+      if (data.url) window.location.href = data.url;
+    } catch (error) {
+      alert("Eroare la deschiderea Stripe.");
+    }
+  };
 
   const tools = [
     { id: 'wan-video', name: 'Wan 2.1 Video', desc: 'Generare Video Pro (I2V)', icon: '🎬' },
@@ -30,7 +71,6 @@ export default function DashboardNeura() {
     setStatus('Se pregătește fișierul...');
 
     try {
-      // 1. Upload în Storage
       const fileName = `${Date.now()}-${file.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('images')
@@ -38,14 +78,12 @@ export default function DashboardNeura() {
 
       if (uploadError) throw uploadError;
 
-      // 2. Luăm URL-ul public
       const { data: { publicUrl } } = supabase.storage
         .from('images')
         .getPublicUrl(fileName);
 
-      setStatus('AI-ul procesează... Generarea video poate dura 2-3 minute.');
+      setStatus('AI-ul procesează... Generarea video poate dura câteva minute.');
 
-      // 3. Trimitem la API-ul nostru
       const response = await fetch('/api/upscale', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,7 +100,7 @@ export default function DashboardNeura() {
         setResult(Array.isArray(data.output) ? data.output[0] : data.output);
         setStatus('Procesare finalizată!');
       } else {
-        throw new Error(data.error || "AI-ul nu a returnat un rezultat.");
+        throw new Error(data.error || "Eroare AI");
       }
     } catch (error: any) {
       console.error(error);
@@ -73,18 +111,29 @@ export default function DashboardNeura() {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
+    <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12 font-sans">
       <div className="max-w-6xl mx-auto">
-        <header className="mb-12 text-center">
+        <header className="mb-12 text-center relative">
           <h1 className="text-5xl font-black italic tracking-tighter mb-2">
             NEURA<span className="text-blue-600">.AI</span>
           </h1>
-          <p className="text-zinc-500 uppercase tracking-widest text-[10px]">Creativity Engine v1.5</p>
+          
+          {/* Indicator de credite și buton de cumpărare */}
+          <div className="flex flex-col items-center gap-2 mt-4">
+            <span className="bg-zinc-900 border border-zinc-800 px-4 py-1 rounded-full text-xs font-mono text-zinc-400 uppercase tracking-widest">
+               🪙 {userCredits} CREDITE DISPONIBILE
+            </span>
+            <button 
+              onClick={handleBuyCredits}
+              className="text-[10px] text-blue-500 hover:text-blue-400 font-bold underline uppercase tracking-tighter"
+            >
+              + Cumpără 50 Credite (50 RON)
+            </button>
+          </div>
         </header>
 
-        {/* Grila de Instrumente */}
         {!result && !loading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-12 animate-in fade-in zoom-in duration-500">
             {tools.map((tool) => (
               <div 
                 key={tool.id}
@@ -99,8 +148,7 @@ export default function DashboardNeura() {
           </div>
         )}
 
-        {/* Zona Centrală */}
-        <div className="max-w-3xl mx-auto bg-zinc-900/40 border border-zinc-800 p-8 rounded-[2.5rem] backdrop-blur-md">
+        <div className="max-w-3xl mx-auto bg-zinc-900/40 border border-zinc-800 p-8 rounded-[2.5rem] backdrop-blur-md shadow-2xl">
           {loading ? (
             <div className="py-20 text-center">
               <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
@@ -134,7 +182,7 @@ export default function DashboardNeura() {
                   <textarea 
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Ex: cinematic slow motion, the camera rotates around the subject, 4k..."
+                    placeholder="Ex: cinematic slow motion, the camera rotates around the subject..."
                     className="w-full bg-black border border-zinc-800 rounded-2xl p-5 text-white focus:border-blue-600 outline-none h-28 text-sm resize-none"
                   />
                 </div>
@@ -143,10 +191,7 @@ export default function DashboardNeura() {
               <input type="file" onChange={handleUpload} className="hidden" id="file-input" />
               <label htmlFor="file-input" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-8 rounded-3xl cursor-pointer transition-all flex flex-col items-center justify-center shadow-xl shadow-blue-900/20 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1">
                 <span className="text-3xl mb-2 text-white/80">⬆️</span>
-                <span className="text-lg">ÎNCARCĂ FIȘIERUL</span>
-                <span className="text-[10px] opacity-60 font-normal mt-1 uppercase tracking-tighter">
-                  Activ: {tools.find(t => t.id === selectedTool)?.name}
-                </span>
+                <span className="text-lg uppercase">Încărcare pentru {tools.find(t => t.id === selectedTool)?.name}</span>
               </label>
             </div>
           )}
