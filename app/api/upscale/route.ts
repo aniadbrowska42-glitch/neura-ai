@@ -13,7 +13,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Lipsește URL-ul imaginii' }, { status: 400 });
     }
 
-    // Am actualizat modelul la o versiune foarte stabilă de Real-ESRGAN
+    // Aceasta este versiunea stabilă a modelului Real-ESRGAN de la NightmareAI
     const output = await replicate.run(
       "nightmareai/real-esrgan:f121d640d228e163cfd2582191e31c08ce2512a510ada9757afb388d0d40e10f",
       {
@@ -27,7 +27,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ output });
   } catch (error: any) {
-    console.error("Eroare AI:", error);
+    console.error("Eroare AI Replicate:", error);
+    // Trimitem eroarea exactă înapoi la site pentru a o vedea în alertă
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
