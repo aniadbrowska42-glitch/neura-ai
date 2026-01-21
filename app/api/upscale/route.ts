@@ -10,25 +10,26 @@ export async function POST(req: Request) {
     const { imageUrl } = await req.json();
 
     if (!imageUrl) {
-      return NextResponse.json({ error: 'Lipsește URL-ul imaginii' }, { status: 400 });
+      return NextResponse.json({ error: 'Lipsește URL-ul' }, { status: 400 });
     }
 
-    // Aceasta este versiunea stabilă a modelului Real-ESRGAN de la NightmareAI
+    // Folosim CodeFormer - un model ultra-stabil pentru claritate și fețe
     const output = await replicate.run(
-      "nightmareai/real-esrgan:f121d640d228e163cfd2582191e31c08ce2512a510ada9757afb388d0d40e10f",
+      "sczhou/codeformer:7de2ea1114d5a356064132448a52994968361f1854930be62879574187e1458e",
       {
         input: {
           image: imageUrl,
           upscale: 2,
-          face_enhance: true
+          face_upsample: true,
+          background_enhance: true,
+          codeformer_fidelity: 0.7
         }
       }
     );
 
     return NextResponse.json({ output });
   } catch (error: any) {
-    console.error("Eroare AI Replicate:", error);
-    // Trimitem eroarea exactă înapoi la site pentru a o vedea în alertă
+    console.error("Eroare Replicate:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
