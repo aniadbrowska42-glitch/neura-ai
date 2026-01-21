@@ -13,12 +13,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Lipsește URL-ul imaginii' }, { status: 400 });
     }
 
+    // Am actualizat modelul la o versiune foarte stabilă de Real-ESRGAN
     const output = await replicate.run(
-      "lucataco/real-esrgan:da30400030c7658516f84931a08620800b3d6bc9f0951307b233a7f805908e0a",
+      "nightmareai/real-esrgan:f121d640d228e163cfd2582191e31c08ce2512a510ada9757afb388d0d40e10f",
       {
         input: {
           image: imageUrl,
-          upscale: 4,
+          upscale: 2,
           face_enhance: true
         }
       }
